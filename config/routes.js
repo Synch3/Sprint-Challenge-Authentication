@@ -11,15 +11,29 @@ module.exports = server => {
   server.get("/api/jokes", authenticate, getJokes);
 };
 
+function generateToken(payload) {
+  return jwt.sign(
+    payload,
+    process.env.SECRET ||
+      "Why can’t banks keep secrets? There are too many tellers!",
+    {
+      expiresIn: "1hr"
+    }
+  );
+}
+
 function register(req, res) {
   // implement user registration
   let { username, password } = req.body;
+
   if (!username || !password)
     return res.json({
       error: true,
-      message: "Please provide a username and/or password"
+      message: "You need BOTH a username and password."
     });
-  password = bcrypt.hashSync(password, SALT_ROUNDS);
+
+  password = bcrypt.hashSync(password, 3);
+
   db("users")
     .insert({ username, password })
     .then(([id]) => {
@@ -35,6 +49,33 @@ function register(req, res) {
 
 function login(req, res) {
   // implement user login
+  let { username, password } = req.body;
+
+  if (!username || !password)
+    return res.json({
+      error: true,
+      message: "You need BOTH a username and a password."
+    });
+
+  db("users")
+    .where({ username: username })
+    .first()
+    .then(user => {
+      if (user && bcrypt.compareSync(password, user.password)) {
+        let token = generateToken(user);
+        res.json({
+          error: false,
+          message: `Welcome ${username}`,
+          token
+        });
+      } else {
+        return register.json({
+          error: true,
+          message: "Login credentials not working."
+        });
+      }
+    })
+    .catch(err => res.json(err));
 }
 
 function getJokes(req, res) {
